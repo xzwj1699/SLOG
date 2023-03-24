@@ -101,14 +101,12 @@ TPCCWorkload::TPCCWorkload(const ConfigurationPtr& config, uint32_t region, cons
     overlap_vec.push_back(i);
   }
   auto overlap_ratio = params_.GetInt32(OVERLAP_RATIO);
-  int common_start_pos = 0;
   for(int i = 0; i * 100 < warehouse_index_[0][local_region_].size() * (100 - overlap_ratio); i++ ) {
     local_selectale_warehouse.push_back(warehouse_index_[0][local_region_][i]);
-    common_start_pos = i;
   }
-  printf(" common start pos: %d\n", common_start_pos);
+  // printf(" common start pos: %d\n", common_start_pos);
   for(int i = 0; i < num_replicas; i++) {
-    for(int j = common_start_pos + 1; j * 100 < warehouse_index_[0][i].size() * (100 - overlap_ratio + overlap_ratio / num_replicas); j++) {
+    for(int j = warehouse_index_[0][i].size() * (100 - overlap_ratio) / 100 + 1; j * 100 < warehouse_index_[0][i].size() * (100 - overlap_ratio + overlap_ratio / num_replicas); j++) {
       common_selectable_warehouse.push_back(warehouse_index_[0][i][j]);
     }
   }
