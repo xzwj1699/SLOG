@@ -30,9 +30,11 @@ constexpr char MH_ZIPF[] = "mh_zipf";
 constexpr char TXN_MIX[] = "mix";
 // Only send single-home transactions
 constexpr char SH_ONLY[] = "sh_only";
+// Overlap ratio defined as percentile of transaction 
+constexpr char OVERLAP_RATIO[] = "overlap_ratio"
 
 const RawParamMap DEFAULT_PARAMS = {
-    {PARTITION, "-1"}, {HOMES, "2"}, {MH_ZIPF, "0"}, {TXN_MIX, "45:43:4:4:4"}, {SH_ONLY, "0"}};
+    {PARTITION, "-1"}, {HOMES, "2"}, {MH_ZIPF, "0"}, {TXN_MIX, "45:43:4:4:4"}, {SH_ONLY, "0"}, {OVERLAP_RATIO, ""}};
 
 template <typename G>
 int NURand(G& g, int A, int x, int y) {
@@ -95,6 +97,28 @@ TPCCWorkload::TPCCWorkload(const ConfigurationPtr& config, uint32_t region, cons
   for (const auto& t : txn_mix_str) {
     txn_mix_.push_back(std::stoi(t));
   }
+  for(int i = 1; i <= 100; i++) {
+    overlap_vec.push_back(i);
+  }
+  auto overlap_ratio = params_.GetInt32(OVERLAP_RATIO);
+  int common_start_pos = 0;
+  for(int i = 0; i * 100 < warehouse_index_[0][local_region_].size() * (100 - overlap_ratio); i++ ) {
+    local_selectale_warehouse.push_back(warehouse_index_[0][local_region_][i]);
+    common_start_pos = i;
+  }
+  for(int i = 0; i < num_replicas; i++) {
+    for(int j = common_start_pos + 1; j * 100 < warehouse_index_[0][i].size() * (100 - overlap_ratio + overlap_ratio / num_replicas); j++) {
+      common_selectable_warehouse.push_back(warehouse_index_[0][i][j]);
+    }
+  }
+  for(auto x: local_selectale_warehouse) {
+    printf("%d ", x);
+  }
+  printf("\n");
+  for(auto x: common_selectable_warehouse) {
+    printf("%d ", x);
+  }
+  printf("\n");
 }
 
 std::pair<Transaction*, TransactionProfile> TPCCWorkload::NextTransaction() {
@@ -113,6 +137,19 @@ std::pair<Transaction*, TransactionProfile> TPCCWorkload::NextTransaction() {
   const auto& selectable_w = warehouse_index_[partition][local_region_];
   CHECK(!selectable_w.empty()) << "Not enough warehouses";
   int w = SampleOnce(rg_, selectable_w);
+
+  auto num_replicas = config_->num_replicas();
+  auto overlap_ratio = params_.GetInt32(OVERLAP_RATIO);
+  // Sample to decide warehouse id to be local or a common access
+  int sample_local_or_common = SampleOnce(rg_, overlap_vec);
+  if(sample_local_or_common <= overlap_ratio) {
+    // To be a common overlap warehouse access
+    w = SampleOnce(rg_, common_selectable_warehouse);
+  }
+  else {
+    // To be a local warehouse access
+    w = SampleOnce(rg_, local_selectale_warehouse);
+  }
 
   Transaction* txn = new Transaction();
   std::discrete_distribution<> select_tpcc_txn(txn_mix_.begin(), txn_mix_.end());

@@ -36,6 +36,9 @@ class TPCCWorkload : public Workload {
   std::mt19937 rg_;
   TxnId client_txn_id_counter_;
   std::vector<int> txn_mix_;
+  std::vector<int> overlap_vec;
+  std::vector<int> local_selectale_warehouse;
+  std::vector<int> common_selectable_warehouse;
 
   struct TPCCIds {
     TPCCIds(int i = 1) : o_id(tpcc::kOrdPerDist + i), no_o_id(1), h_id(i + 1) {}
