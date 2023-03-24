@@ -106,7 +106,7 @@ TPCCWorkload::TPCCWorkload(const ConfigurationPtr& config, uint32_t region, cons
     local_selectale_warehouse.push_back(warehouse_index_[0][local_region_][i]);
     common_start_pos = i;
   }
-  printf(" common start pos: %d", common_start_pos);
+  printf(" common start pos: %d\n", common_start_pos);
   for(int i = 0; i < num_replicas; i++) {
     for(int j = common_start_pos + 1; j * 100 < warehouse_index_[0][local_region_].size() * (100 - overlap_ratio + overlap_ratio / num_replicas); j++) {
       common_selectable_warehouse.push_back(warehouse_index_[0][i][j]);
@@ -122,6 +122,7 @@ TPCCWorkload::TPCCWorkload(const ConfigurationPtr& config, uint32_t region, cons
   }
   printf(" common size: %d", common_selectable_warehouse.size());
   printf("\n");
+  printf("actual overlap ratio: %lf\n", common_selectable_warehouse.size() * 1.0 / (local_selectale_warehouse.size() + common_selectable_warehouse.size()));
 }
 
 std::pair<Transaction*, TransactionProfile> TPCCWorkload::NextTransaction() {
