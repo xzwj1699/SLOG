@@ -31,7 +31,7 @@ constexpr char TXN_MIX[] = "mix";
 // Only send single-home transactions
 constexpr char SH_ONLY[] = "sh_only";
 // Overlap ratio defined as percentile of transaction 
-constexpr char OVERLAP_RATIO[] = "overlap_ratio"
+constexpr char OVERLAP_RATIO[] = "overlap_ratio";
 
 const RawParamMap DEFAULT_PARAMS = {
     {PARTITION, "-1"}, {HOMES, "2"}, {MH_ZIPF, "0"}, {TXN_MIX, "45:43:4:4:4"}, {SH_ONLY, "0"}, {OVERLAP_RATIO, ""}};
