@@ -1,5 +1,6 @@
 #pragma once
 
+#include <glog/logging.h>
 #include <algorithm>
 #include <map>
 #include <random>
@@ -205,6 +206,7 @@ class KeyList {
     num_partitions_ = config->num_partitions();
     num_replicas_ = config->num_replicas();
     num_keys_ = std::max(1LL, ((num_records - partition) / num_partitions_ - master) / num_replicas_);
+    LOG(INFO) << "number of record: " << num_records << " number of keys: " << num_keys_;
   }
 
   void AddKey(Key key) {
@@ -216,6 +218,20 @@ class KeyList {
       return;
     }
     cold_keys_.push_back(key);
+  }
+
+  Key GetLocalKey(std::mt19937& rg, int overlap_ratio) {
+    std::uniform_int_distribution<uint64_t> dis(0, num_keys_ * (100 - overlap_ratio) / 100 - 1);
+    uint64_t key = num_partitions_ * (dis(rg) * num_replicas_ + master_) + partition_;
+    // LOG(INFO) << "key value: " << key << " num_partiton: " << num_partitions_ << " num_replicas: " << num_replicas_;
+    return std::to_string(key);
+  }
+
+  Key GetCommonKey(std::mt19937& rg, int overlap_ratio) {
+    std::uniform_int_distribution<uint64_t> dis(num_keys_ - num_keys_ * overlap_ratio / 100 / num_replicas_ - 1, num_keys_ - 1);
+    uint64_t key = num_partitions_ * (dis(rg) * num_replicas_ + master_) + partition_;
+    // LOG(INFO) << "key value: " << key << " num_partiton: " << num_partitions_ << " num_replicas: " << num_replicas_;
+    return std::to_string(key);
   }
 
   Key GetRandomHotKey(std::mt19937& rg) {
@@ -259,4 +275,4 @@ class KeyList {
   std::vector<Key> hot_keys_;
 };
 
-}  // namespace slog
+}  // namespace slog1

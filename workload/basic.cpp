@@ -55,11 +55,13 @@ constexpr char SP_PARTITION[] = "sp_partition";
 // Home that is used in a single-home transaction.
 // The NEAREST parameter is ignored if this is positive
 constexpr char SH_HOME[] = "sh_home";
+// Overlap ratio for special case, defined as percentile of common area access
+constexpr char OVERLAP[] = "overlap_ratio";
 
 const RawParamMap DEFAULT_PARAMS = {{MH_PCT, "0"},   {MH_HOMES, "2"},    {MH_ZIPF, "0"},  {MP_PCT, "0"},
                                     {MP_PARTS, "2"}, {HOT, "0"},         {RECORDS, "10"}, {HOT_RECORDS, "0"},
                                     {WRITES, "10"},  {VALUE_SIZE, "50"}, {NEAREST, "1"},  {SP_PARTITION, "-1"},
-                                    {SH_HOME, "-1"}};
+                                    {SH_HOME, "-1"}, {OVERLAP, "-1"}};
 
 }  // namespace
 
@@ -180,6 +182,10 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
   bernoulli_distribution is_mh(multi_home_pct / 100);
   pro.is_multi_home = is_mh(rg_);
 
+  bool is_overlap_mode = params_.GetInt32(OVERLAP) >= 0;
+  bool local_access = true;
+  auto overlap_ratio = params_.GetInt32(OVERLAP);
+
   // Select a number of homes to choose from for each record
   vector<uint32_t> selected_homes;
   if (pro.is_multi_home) {
@@ -201,6 +207,15 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
     } else {
       if (params_.GetInt32(NEAREST)) {
         selected_homes.push_back(local_region_);
+      } else if(is_overlap_mode) {
+        std::uniform_int_distribution<uint32_t> dis(1, 100);
+        local_access = dis(rg_) > overlap_ratio;
+        if (local_access) {
+          selected_homes.push_back(local_region_);
+        } else {
+          std::uniform_int_distribution<uint32_t> common_dis(0, num_replicas - 1);
+          selected_homes.push_back(common_dis(rg_));
+        }
       } else {
         std::uniform_int_distribution<uint32_t> dis(0, num_replicas - 1);
         selected_homes.push_back(dis(rg_));
@@ -228,11 +243,17 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
     auto home = selected_homes[i / ((records + 1) / selected_homes.size())];
     for (;;) {
       Key key;
-      if (is_hot[i]) {
+      if (is_overlap_mode && local_access) {
+        key = partition_to_key_lists_[partition][home].GetLocalKey(rg_, overlap_ratio);
+      } else if (is_overlap_mode && !local_access) {
+        key = partition_to_key_lists_[partition][home].GetCommonKey(rg_, overlap_ratio);
+      } else if (is_hot[i]) {
         key = partition_to_key_lists_[partition][home].GetRandomHotKey(rg_);
       } else {
         key = partition_to_key_lists_[partition][home].GetRandomColdKey(rg_);
       }
+
+      // LOG(WARNING) << "send key: " << key;
 
       auto ins = pro.records.try_emplace(key, TransactionProfile::Record());
       if (ins.second) {
