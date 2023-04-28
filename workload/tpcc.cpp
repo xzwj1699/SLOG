@@ -30,9 +30,11 @@ constexpr char MH_ZIPF[] = "mh_zipf";
 constexpr char TXN_MIX[] = "mix";
 // Only send single-home transactions
 constexpr char SH_ONLY[] = "sh_only";
+// Overlap ratio defined as percentile of transaction 
+constexpr char RRATIO[] = "rratio";
 
 const RawParamMap DEFAULT_PARAMS = {
-    {PARTITION, "-1"}, {HOMES, "2"}, {MH_ZIPF, "0"}, {TXN_MIX, "45:43:4:4:4"}, {SH_ONLY, "0"}};
+    {PARTITION, "-1"}, {HOMES, "2"}, {MH_ZIPF, "0"}, {TXN_MIX, "45:43:4:4:4"}, {SH_ONLY, "0"}, {RRATIO, ""}};
 
 template <typename G>
 int NURand(G& g, int A, int x, int y) {
@@ -151,14 +153,23 @@ void TPCCWorkload::NewOrder(Transaction& txn, TransactionProfile& pro, int w_id,
   int o_id = id_generator_.NextOId(w_id, d_id);
   int i_w_id = partition + static_cast<int>(local_region_ * config_->num_partitions()) + 1;
   auto datetime = std::chrono::system_clock::now().time_since_epoch().count();
+  auto rratio = params_.GetInt32(RRATIO);
   std::array<tpcc::NewOrderTxn::OrderLine, tpcc::kLinePerOrder> ol;
   std::bernoulli_distribution is_remote(0.01);
+  bool remote_internal = std::uniform_int_distribution<>(1, 100)(rg_) <= rratio? true: false;
   std::uniform_int_distribution<> quantity_rnd(1, 10);
   for (size_t i = 0; i < tpcc::kLinePerOrder; i++) {
     auto supply_w_id = w_id;
     if (is_remote(rg_) && !remote_warehouses.empty()) {
-      supply_w_id = remote_warehouses[i % remote_warehouses.size()];
-      pro.is_multi_home = true;
+      if(remote_internal) {
+        supply_w_id = remote_warehouses[i % remote_warehouses.size()];
+        pro.is_multi_home = true;
+      } else {
+        const auto& selectable_w = warehouse_index_[partition][local_region_];
+        int w_id_diff;
+        while( (w_id_diff = SampleOnce(rg_, selectable_w)) == w_id);
+        supply_w_id = w_id_diff;
+      }
     }
     ol[i] = tpcc::NewOrderTxn::OrderLine({
         .id = static_cast<int>(i),
