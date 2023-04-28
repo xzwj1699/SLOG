@@ -160,7 +160,7 @@ void RunBenchmark(vector<unique_ptr<ModuleRunner>>& generators) {
 
 struct ResultWriters {
   const vector<string> kTxnColumns = {"txn_id",    "coordinator",    "replicas", "partitions",
-                                      "generator", "global_log_pos", "sent_at",  "received_at"};
+                                      "generator", "global_log_pos", "sent_at",  "received_at", "latency"};
   const vector<string> kEventsColumns = {"txn_id", "event", "time", "machine", "home"};
   const vector<string> kSummaryColumns = {"committed",       "aborted",    "not_started",
                                           "single_home",     "multi_home", "single_partition",
@@ -285,7 +285,7 @@ void WriteResults(const vector<unique_ptr<ModuleRunner>>& generators) {
     }
     writers->txns << txn_internal.id() << txn_internal.coordinating_server() << involved_replicas << involved_partitions
                   << info.generator_id << global_log_pos << info.sent_at.time_since_epoch().count()
-                  << info.recv_at.time_since_epoch().count() << csvendl;
+                  << info.recv_at.time_since_epoch().count() << ((info.recv_at.time_since_epoch().count() - info.sent_at.time_since_epoch().count())/1000000)<<csvendl;
 
     for (auto& e : txn_internal.events()) {
       writers->events << txn_internal.id() << ENUM_NAME(e.event(), TransactionEvent) << e.time() << e.machine()
