@@ -59,11 +59,22 @@ constexpr char SH_HOME[] = "sh_home";
 constexpr char OVERLAP[] = "overlap_ratio";
 // Access pattern cooperate with data placement
 constexpr char ACCESS_COOP[] = "access_coop";
+// Remote key access possibility in x / 1000
+constexpr char REMOTE_RATIO[] = "remote_ratio";
+// Migration range, maybe be only suitable for two-node experiment
+constexpr char MIGRATION_RANGR[] = "migration_range";
+
+template <typename T, typename G>
+T SampleOnce(G& g, const std::vector<T>& source) {
+  CHECK(!source.empty());
+  size_t i = std::uniform_int_distribution<size_t>(0, source.size() - 1)(g);
+  return source[i];
+}
 
 const RawParamMap DEFAULT_PARAMS = {{MH_PCT, "0"},   {MH_HOMES, "2"},    {MH_ZIPF, "0"},  {MP_PCT, "0"},
                                     {MP_PARTS, "2"}, {HOT, "0"},         {RECORDS, "10"}, {HOT_RECORDS, "0"},
                                     {WRITES, "10"},  {VALUE_SIZE, "50"}, {NEAREST, "1"},  {SP_PARTITION, "-1"},
-                                    {SH_HOME, "-1"}, {OVERLAP, "-1"}, {ACCESS_COOP, "true"}};
+                                    {SH_HOME, "-1"}, {OVERLAP, "-1"}, {ACCESS_COOP, "true"}, {REMOTE_RATIO, "-1"}, {MIGRATION_RANGR, "0"}};
 
 }  // namespace
 
@@ -190,13 +201,30 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
   bool local_access = true;
   auto overlap_ratio = params_.GetInt32(OVERLAP);
 
+  bool is_remote_ratio_mode = params_.GetInt32(REMOTE_RATIO) >= 0;
+  auto remote_ratio = params_.GetInt32(REMOTE_RATIO);
+
+  bool is_migration_mode = params_.GetInt32(MIGRATION_RANGR) != 0;
+  auto migration_range = params_.GetInt32(MIGRATION_RANGR);
+
+  // Select a number of homes to choose from for each record
+  vector<uint32_t> selected_homes;
+  vector<KeyMetadata> keys;
+  vector<vector<string>> code;
+
   auto writes = params_.GetUInt32(WRITES);
   auto hot_records = params_.GetUInt32(HOT_RECORDS);
   auto records = params_.GetUInt32(RECORDS);
   auto value_size = params_.GetUInt32(VALUE_SIZE);
 
-  // Select a number of homes to choose from for each record
-  vector<uint32_t> selected_homes;
+  std::vector<uint32_t> remote_regions;
+  for(size_t i = 0; i < num_replicas; i++) {
+    if(i == local_region_) continue;
+    else {
+      remote_regions.push_back(i);
+    }
+  }
+
   if (pro.is_multi_home) {
     CHECK_GE(num_replicas, 2) << "There must be at least 2 regions for MH txns";
     auto max_num_homes = std::min(params_.GetUInt32(MH_HOMES), num_replicas);
@@ -239,6 +267,32 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
             selected_homes.push_back(common_dis(rg_));
           }
         }
+      } else if(is_remote_ratio_mode) {
+        std::uniform_int_distribution<uint32_t> dis(0, 1000);
+        for(size_t i = 0; i < records; i++) {
+          auto is_remote = dis(rg_) < remote_ratio;
+          if(is_remote) {
+            selected_homes.push_back(SampleOnce(rg_, remote_regions));
+          } else {
+            selected_homes.push_back(local_region_);
+          }
+        }
+      } else if(is_migration_mode) {
+        if(migration_range < 0) {
+          for(size_t i = 0; i < records; i++) {
+            selected_homes.push_back(local_region_);
+          }
+        } else {
+          std::uniform_int_distribution<uint32_t> dis(1, 100 + migration_range);
+          for(size_t i = 0; i < records; i++) {
+            auto select_remote = dis(rg_) > 100;
+            if(select_remote) {
+              selected_homes.push_back(SampleOnce(rg_, remote_regions));
+            } else {
+              selected_homes.push_back(local_region_);
+            }
+          }
+        }
       } else {
         std::uniform_int_distribution<uint32_t> dis(0, num_replicas - 1);
         selected_homes.push_back(dis(rg_));
@@ -248,6 +302,13 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
 
   vector<KeyMetadata> keys;
   vector<vector<string>> code;
+  auto first_home = selected_homes[0];
+  for(size_t i = 1; i < selected_homes.size(); i++) {
+    if(selected_homes[i] != first_home) {
+      pro.is_multi_home = true;
+      break;
+    }
+  }
 
   CHECK_LE(writes, records) << "Number of writes cannot exceed number of records in a transaction!";
   CHECK_LE(hot_records, records) << "Number of hot records cannot exceed number of records in a transaction!";
@@ -259,6 +320,9 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
   for (size_t i = 0; i < records; i++) {
     auto partition = selected_partitions[i % selected_partitions.size()];
     auto home = selected_homes[i / ((records + 1) / selected_homes.size())];
+    if(is_remote_ratio_mode || is_migration_mode) {
+      home = selected_homes[i];
+    }
     for (;;) {
       Key key;
       if (access_coop) {
@@ -267,13 +331,19 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
         key = partition_to_key_lists_[partition][home].GetLocalKey(rg_, overlap_ratio);
       } else if (is_overlap_mode && !local_access) {
         key = partition_to_key_lists_[partition][home].GetCommonKey(rg_, overlap_ratio);
+      } else if (is_remote_ratio_mode) {
+        key = partition_to_key_lists_[partition][home].GetLocalKey(rg_, 0);
+      } else if (is_migration_mode) {
+        if (home == local_region_) {
+          key = partition_to_key_lists_[partition][home].GetLocalKey(rg_, 0);
+        } else {
+          key = partition_to_key_lists_[partition][home].GetLocalKey(rg_, 100 - migration_range);
+        }
       } else if (is_hot[i]) {
         key = partition_to_key_lists_[partition][home].GetRandomHotKey(rg_);
       } else {
         key = partition_to_key_lists_[partition][home].GetRandomColdKey(rg_);
       }
-
-      // LOG(WARNING) << "send key: " << key;
 
       auto ins = pro.records.try_emplace(key, TransactionProfile::Record());
       if (ins.second) {
