@@ -71,6 +71,11 @@ class WorkloadParams {
     return std::stoi(raw_params_.at(key));
   }
 
+  bool GetBool(const std::string& key) const {
+    CheckKeyExists(key);
+    return raw_params_.at(key) == "true";
+  }
+
   int64_t GetInt64(const std::string& key) const {
     CheckKeyExists(key);
     return std::stoll(raw_params_.at(key));
@@ -218,6 +223,12 @@ class KeyList {
       return;
     }
     cold_keys_.push_back(key);
+  }
+
+  Key GetRamdomKey(std::mt19937& rg) {
+    std::uniform_int_distribution<uint64_t> dis(0, num_keys_);
+    uint64_t key = dis(rg) + num_keys_ * master_;
+    return std::to_string(key);
   }
 
   Key GetLocalKey(std::mt19937& rg, int overlap_ratio) {

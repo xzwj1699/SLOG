@@ -57,11 +57,13 @@ constexpr char SP_PARTITION[] = "sp_partition";
 constexpr char SH_HOME[] = "sh_home";
 // Overlap ratio for special case, defined as percentile of common area access
 constexpr char OVERLAP[] = "overlap_ratio";
+// Access pattern cooperate with data placement
+constexpr char ACCESS_COOP[] = "access_coop";
 
 const RawParamMap DEFAULT_PARAMS = {{MH_PCT, "0"},   {MH_HOMES, "2"},    {MH_ZIPF, "0"},  {MP_PCT, "0"},
                                     {MP_PARTS, "2"}, {HOT, "0"},         {RECORDS, "10"}, {HOT_RECORDS, "0"},
                                     {WRITES, "10"},  {VALUE_SIZE, "50"}, {NEAREST, "1"},  {SP_PARTITION, "-1"},
-                                    {SH_HOME, "-1"}, {OVERLAP, "-1"}};
+                                    {SH_HOME, "-1"}, {OVERLAP, "-1"}, {ACCESS_COOP, "true"}};
 
 }  // namespace
 
@@ -153,6 +155,8 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
   bernoulli_distribution is_mp(multi_partition_pct / 100);
   pro.is_multi_partition = is_mp(rg_);
 
+  auto access_coop = params_.GetBool(ACCESS_COOP);
+
   // Select a number of partitions to choose from for each record
   vector<uint32_t> selected_partitions;
   if (pro.is_multi_partition) {
@@ -186,6 +190,11 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
   bool local_access = true;
   auto overlap_ratio = params_.GetInt32(OVERLAP);
 
+  auto writes = params_.GetUInt32(WRITES);
+  auto hot_records = params_.GetUInt32(HOT_RECORDS);
+  auto records = params_.GetUInt32(RECORDS);
+  auto value_size = params_.GetUInt32(VALUE_SIZE);
+
   // Select a number of homes to choose from for each record
   vector<uint32_t> selected_homes;
   if (pro.is_multi_home) {
@@ -201,6 +210,18 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
     }
     auto sampled_homes = zipf_sample(rg_, zipf_coef_, distance_ranking_, num_homes);
     selected_homes.insert(selected_homes.end(), sampled_homes.begin(), sampled_homes.end());
+  } else if (access_coop) {
+    std::uniform_int_distribution<uint32_t> dis(1, 100);
+    for (size_t i = 0; i < records; i++) {
+      auto is_remote = dis(rg_) <= overlap_ratio;
+      if (is_remote) {
+        std::uniform_int_distribution<uint32_t> choose_remote(0, distance_ranking_.size() - 1);
+        selected_homes.push_back(distance_ranking_[choose_remote(rg_)]);
+        pro.is_multi_home = true;
+      } else {
+        selected_homes.push_back(local_region_);
+      }
+    }
   } else {
     if (params_.GetInt32(SH_HOME) >= 0) {
       selected_homes.push_back(params_.GetInt32(SH_HOME));
@@ -208,13 +229,15 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
       if (params_.GetInt32(NEAREST)) {
         selected_homes.push_back(local_region_);
       } else if(is_overlap_mode) {
-        std::uniform_int_distribution<uint32_t> dis(1, 100);
-        local_access = dis(rg_) > overlap_ratio;
-        if (local_access) {
-          selected_homes.push_back(local_region_);
-        } else {
-          std::uniform_int_distribution<uint32_t> common_dis(0, num_replicas - 1);
-          selected_homes.push_back(common_dis(rg_));
+        for (size_t i = 0; i < records; i++) {
+          std::uniform_int_distribution<uint32_t> dis(1, 100);
+          local_access = dis(rg_) > overlap_ratio;
+          if (local_access) {
+            selected_homes.push_back(local_region_);
+          } else {
+            std::uniform_int_distribution<uint32_t> common_dis(0, num_replicas - 1);
+            selected_homes.push_back(common_dis(rg_));
+          }
         }
       } else {
         std::uniform_int_distribution<uint32_t> dis(0, num_replicas - 1);
@@ -225,11 +248,6 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
 
   vector<KeyMetadata> keys;
   vector<vector<string>> code;
-
-  auto writes = params_.GetUInt32(WRITES);
-  auto hot_records = params_.GetUInt32(HOT_RECORDS);
-  auto records = params_.GetUInt32(RECORDS);
-  auto value_size = params_.GetUInt32(VALUE_SIZE);
 
   CHECK_LE(writes, records) << "Number of writes cannot exceed number of records in a transaction!";
   CHECK_LE(hot_records, records) << "Number of hot records cannot exceed number of records in a transaction!";
@@ -243,7 +261,9 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
     auto home = selected_homes[i / ((records + 1) / selected_homes.size())];
     for (;;) {
       Key key;
-      if (is_overlap_mode && local_access) {
+      if (access_coop) {
+        key = partition_to_key_lists_[partition][home].GetRamdomKey(rg_);
+      } else if (is_overlap_mode && local_access) {
         key = partition_to_key_lists_[partition][home].GetLocalKey(rg_, overlap_ratio);
       } else if (is_overlap_mode && !local_access) {
         key = partition_to_key_lists_[partition][home].GetCommonKey(rg_, overlap_ratio);
