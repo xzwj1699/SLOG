@@ -300,8 +300,8 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
     }
   }
 
-  vector<KeyMetadata> keys;
-  vector<vector<string>> code;
+  // vector<KeyMetadata> keys;
+  // vector<vector<string>> code;
   auto first_home = selected_homes[0];
   for(size_t i = 1; i < selected_homes.size(); i++) {
     if(selected_homes[i] != first_home) {
