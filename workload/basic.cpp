@@ -320,7 +320,7 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
   for (size_t i = 0; i < records; i++) {
     auto partition = selected_partitions[i % selected_partitions.size()];
     auto home = selected_homes[i / ((records + 1) / selected_homes.size())];
-    if(is_remote_ratio_mode || is_migration_mode) {
+    if(is_remote_ratio_mode || is_migration_mode || access_coop) {
       home = selected_homes[i];
     }
     for (;;) {
