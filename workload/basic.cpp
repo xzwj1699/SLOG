@@ -264,7 +264,7 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
             selected_homes.push_back(local_region_);
           } else {
             std::uniform_int_distribution<uint32_t> common_dis(0, num_replicas - 1);
-            selected_homes.push_back(common_dis(rg_));
+            selected_homes.push_back(SampleOnce(rg_, remote_regions));
           }
         }
       } else if(is_remote_ratio_mode) {
