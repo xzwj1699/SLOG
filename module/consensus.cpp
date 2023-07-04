@@ -19,10 +19,20 @@ vector<MachineId> GetMembers(const ConfigurationPtr& config) {
   return members;
 }
 
+vector<MachineId> GetMembersForGlobal(const ConfigurationPtr& config) {
+  vector<MachineId> members;
+  members.reserve(config->num_replicas());
+  // Enlist all machines in the same region as members
+  for (uint32_t rep = 0; rep < config->num_replicas(); rep++) {
+    members.push_back(config->MakeMachineId(rep, 0));
+  }
+  return members;
+}
+
 }  // namespace
 
 GlobalPaxos::GlobalPaxos(const shared_ptr<Broker>& broker, std::chrono::milliseconds poll_timeout)
-    : SimulatedMultiPaxos(kGlobalPaxos, broker, GetMembers(broker->config()), broker->config()->local_machine_id(),
+    : SimulatedMultiPaxos(kGlobalPaxos, broker, GetMembersForGlobal(broker->config()), broker->config()->local_machine_id(),
                           poll_timeout),
       local_machine_id_(broker->config()->local_machine_id()) {
   auto& config = broker->config();
