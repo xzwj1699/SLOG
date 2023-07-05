@@ -203,7 +203,7 @@ void TPCCWorkload::NewOrder(Transaction& txn, TransactionProfile& pro, int w_id,
   std::bernoulli_distribution is_remote(0.01);
   std::uniform_int_distribution<> quantity_rnd(1, 10);
   std::uniform_int_distribution<> cross_region_rnd(1, 100);
-  bool cross_region = cross_region_rnd(rg_) <= params_->GetInt32(OVERLAP_RATIO);
+  bool cross_region = cross_region_rnd(rg_) <= params_.GetInt32(OVERLAP_RATIO);
   for (size_t i = 0; i < tpcc::kLinePerOrder; i++) {
     auto supply_w_id = w_id;
     if (is_remote(rg_) && !remote_warehouses.empty() && cross_region) {
