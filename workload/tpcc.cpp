@@ -161,7 +161,7 @@ std::pair<Transaction*, TransactionProfile> TPCCWorkload::NextTransaction() {
     // To be a local warehouse access
     w = SampleOnce(rg_, local_selectale_warehouse);
   }
-
+  w = SampleOnce(rg_, local_selectale_warehouse);
   Transaction* txn = new Transaction();
   std::discrete_distribution<> select_tpcc_txn(txn_mix_.begin(), txn_mix_.end());
   switch (select_tpcc_txn(rg_)) {
