@@ -110,6 +110,7 @@ TPCCWorkload::TPCCWorkload(const ConfigurationPtr& config, uint32_t region, cons
   // }
   auto coop_access = params_.GetBool(ACCESS_COOP);
   auto access_bias = params_.GetInt32(COOP_BIAS);
+  std::cout << coop_access << " " << warehouse_index_[0][local_region_].size() << std::endl;
   for (int i = 0; i < warehouse_index_[0][local_region_].size(); i++) {
     if (coop_access && i <= warehouse_index_[0][local_region_].size() * access_bias / 100) {
       local_selectale_warehouse.push_back(warehouse_index_[0][(local_region_ + 1) % num_replicas][i]);
@@ -220,8 +221,9 @@ void TPCCWorkload::NewOrder(Transaction& txn, TransactionProfile& pro, int w_id,
       supply_w_id = remote_warehouses[i % remote_warehouses.size()];
       pro.is_multi_home = true;
     } else {
-      supply_w_id = local_selectale_warehouse[i % local_selectale_warehouse.size()];
+      supply_w_id = w_id;
     }
+    // pro.is_multi_home = true;
     ol[i] = tpcc::NewOrderTxn::OrderLine({
         .id = static_cast<int>(i),
         .supply_w_id = supply_w_id,
