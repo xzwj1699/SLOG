@@ -32,9 +32,13 @@ constexpr char TXN_MIX[] = "mix";
 constexpr char SH_ONLY[] = "sh_only";
 // Overlap ratio defined as percentile of transaction 
 constexpr char OVERLAP_RATIO[] = "overlap_ratio";
+// Access pattern cooperate with data placement
+constexpr char ACCESS_COOP[] = "access_coop";
+// bias ratio between access pattern and data placement
+constexpr char COOP_BIAS[] = "bias";
 
 const RawParamMap DEFAULT_PARAMS = {
-    {PARTITION, "-1"}, {HOMES, "2"}, {MH_ZIPF, "0"}, {TXN_MIX, "45:43:4:4:4"}, {SH_ONLY, "0"}, {OVERLAP_RATIO, ""}};
+    {PARTITION, "-1"}, {HOMES, "2"}, {MH_ZIPF, "0"}, {TXN_MIX, "45:43:4:4:4"}, {SH_ONLY, "0"}, {OVERLAP_RATIO, ""}, {ACCESS_COOP, "false"}, {COOP_BIAS, "0"}};
 
 template <typename G>
 int NURand(G& g, int A, int x, int y) {
@@ -104,8 +108,14 @@ TPCCWorkload::TPCCWorkload(const ConfigurationPtr& config, uint32_t region, cons
   // for(int i = 0; i * 100 < warehouse_index_[0][local_region_].size() * (100 - overlap_ratio); i++ ) {
   //   local_selectale_warehouse.push_back(warehouse_index_[0][local_region_][i]);
   // }
+  auto coop_access = params_.GetBool(ACCESS_COOP);
+  auto access_bias = params_.GetInt32(COOP_BIAS);
   for (int i = 0; i < warehouse_index_[0][local_region_].size(); i++) {
-    local_selectale_warehouse.push_back(warehouse_index_[0][local_region_][i]);
+    if (coop_access && i <= warehouse_index_[0][local_region_].size() * access_bias / 100) {
+      local_selectale_warehouse.push_back(warehouse_index_[0][(local_region_ + 1) % num_replicas][i]);
+    } else {
+      local_selectale_warehouse.push_back(warehouse_index_[0][local_region_][i]);
+    }
   }
   // printf(" common start pos: %d\n", common_start_pos);
   // for(int i = 0; i < num_replicas; i++) {
