@@ -74,7 +74,7 @@ T SampleOnce(G& g, const std::vector<T>& source) {
 const RawParamMap DEFAULT_PARAMS = {{MH_PCT, "0"},   {MH_HOMES, "2"},    {MH_ZIPF, "0"},  {MP_PCT, "0"},
                                     {MP_PARTS, "2"}, {HOT, "0"},         {RECORDS, "10"}, {HOT_RECORDS, "0"},
                                     {WRITES, "10"},  {VALUE_SIZE, "50"}, {NEAREST, "1"},  {SP_PARTITION, "-1"},
-                                    {SH_HOME, "-1"}, {OVERLAP, "-1"}, {ACCESS_COOP, "true"}, {REMOTE_RATIO, "-1"}, {MIGRATION_RANGR, "0"}};
+                                    {SH_HOME, "-1"}, {OVERLAP, "-1"}, {ACCESS_COOP, "false"}, {REMOTE_RATIO, "-1"}, {MIGRATION_RANGR, "0"}};
 
 }  // namespace
 
@@ -309,6 +309,7 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
       break;
     }
   }
+  // std::cout << pro.is_multi_home << std::endl;
 
   CHECK_LE(writes, records) << "Number of writes cannot exceed number of records in a transaction!";
   CHECK_LE(hot_records, records) << "Number of hot records cannot exceed number of records in a transaction!";
