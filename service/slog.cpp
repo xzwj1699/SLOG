@@ -218,9 +218,9 @@ int main(int argc, char* argv[]) {
   // clang-format on
 
   // One region is selected to globally order the multihome batches
-  if (config->leader_replica_for_multi_home_ordering() == config->local_replica()) {
+  // if (config->leader_replica_for_multi_home_ordering() == config->local_replica()) {
     modules.emplace_back(MakeRunnerFor<slog::GlobalPaxos>(broker), slog::ModuleId::GLOBALPAXOS);
-  }
+  // }
 
   // Block SIGINT from here so that the new threads inherit the block mask
   sigset_t signal_set;
