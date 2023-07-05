@@ -225,9 +225,16 @@ class KeyList {
     cold_keys_.push_back(key);
   }
 
-  Key GetRamdomKey(std::mt19937& rg) {
+  Key GetRamdomKey(std::mt19937& rg, uint32_t bias) {
     std::uniform_int_distribution<uint64_t> dis(0, num_keys_);
-    uint64_t key = dis(rg) + num_keys_ * master_;
+    auto random_num = dis(rg);
+    uint64_t key = 0;
+    if (random_num <= num_keys_ / 100 * bias) {
+      key = random_num * num_replicas_ + (master_ + 1) % num_replicas_;
+    } else {
+      key = random_num * num_replicas_ + master_;
+    }
+    // uint64_t key = dis(rg) * num_replicas_ + master_;
     return std::to_string(key);
   }
 

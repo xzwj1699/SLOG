@@ -59,6 +59,8 @@ constexpr char SH_HOME[] = "sh_home";
 constexpr char OVERLAP[] = "overlap_ratio";
 // Access pattern cooperate with data placement
 constexpr char ACCESS_COOP[] = "access_coop";
+// bias ratio between access pattern and data placement
+constexpr char COOP_BIAS[] = "bias";
 // Remote key access possibility in x / 1000
 constexpr char REMOTE_RATIO[] = "remote_ratio";
 // Migration range, maybe be only suitable for two-node experiment
@@ -74,7 +76,7 @@ T SampleOnce(G& g, const std::vector<T>& source) {
 const RawParamMap DEFAULT_PARAMS = {{MH_PCT, "0"},   {MH_HOMES, "2"},    {MH_ZIPF, "0"},  {MP_PCT, "0"},
                                     {MP_PARTS, "2"}, {HOT, "0"},         {RECORDS, "10"}, {HOT_RECORDS, "0"},
                                     {WRITES, "10"},  {VALUE_SIZE, "50"}, {NEAREST, "1"},  {SP_PARTITION, "-1"},
-                                    {SH_HOME, "-1"}, {OVERLAP, "-1"}, {ACCESS_COOP, "false"}, {REMOTE_RATIO, "-1"}, {MIGRATION_RANGR, "0"}};
+                                    {SH_HOME, "-1"}, {OVERLAP, "-1"}, {ACCESS_COOP, "false"}, {REMOTE_RATIO, "-1"}, {MIGRATION_RANGR, "0"}, {COOP_BIAS, "0"}};
 
 }  // namespace
 
@@ -327,7 +329,8 @@ std::pair<Transaction*, TransactionProfile> BasicWorkload::NextTransaction() {
     for (;;) {
       Key key;
       if (access_coop) {
-        key = partition_to_key_lists_[partition][home].GetRamdomKey(rg_);
+        auto bias = params_.GetInt32(COOP_BIAS);
+        key = partition_to_key_lists_[partition][home].GetRamdomKey(rg_, bias);
       } else if (is_overlap_mode && local_access) {
         key = partition_to_key_lists_[partition][home].GetLocalKey(rg_, overlap_ratio);
       } else if (is_overlap_mode && !local_access) {
