@@ -36,6 +36,7 @@ GlobalPaxos::GlobalPaxos(const shared_ptr<Broker>& broker, std::chrono::millisec
                           poll_timeout),
       local_machine_id_(broker->config()->local_machine_id()) {
   auto& config = broker->config();
+  std::cout << config->num_replicas() << " " << config->num_partitions() << std::endl;
   for (uint32_t rep = 0; rep < config->num_replicas(); rep++) {
     multihome_orderers_.push_back(config->MakeMachineId(rep, config->leader_partition_for_multi_home_ordering()));
   }
