@@ -101,12 +101,21 @@ TPCCWorkload::TPCCWorkload(const ConfigurationPtr& config, uint32_t region, cons
     overlap_vec.push_back(i);
   }
   auto overlap_ratio = params_.GetInt32(OVERLAP_RATIO);
-  for(int i = 0; i * 100 < warehouse_index_[0][local_region_].size() * (100 - overlap_ratio); i++ ) {
+  // for(int i = 0; i * 100 < warehouse_index_[0][local_region_].size() * (100 - overlap_ratio); i++ ) {
+  //   local_selectale_warehouse.push_back(warehouse_index_[0][local_region_][i]);
+  // }
+  for (int i = 0; i < warehouse_index_[0][local_region_].size(); i++) {
     local_selectale_warehouse.push_back(warehouse_index_[0][local_region_][i]);
   }
   // printf(" common start pos: %d\n", common_start_pos);
-  for(int i = 0; i < num_replicas; i++) {
-    for(int j = warehouse_index_[0][i].size() * (100 - overlap_ratio) / 100 + 1; j * 100 < warehouse_index_[0][i].size() * (100 - overlap_ratio + overlap_ratio / num_replicas); j++) {
+  // for(int i = 0; i < num_replicas; i++) {
+  //   for(int j = warehouse_index_[0][i].size() * (100 - overlap_ratio) / 100 + 1; j * 100 < warehouse_index_[0][i].size() * (100 - overlap_ratio + overlap_ratio / num_replicas); j++) {
+  //     common_selectable_warehouse.push_back(warehouse_index_[0][i][j]);
+  //   }
+  // }
+  for (int i = 0; i < num_replicas; i++) {
+    if (i == local_region_) continue;
+    for (int j = 0; j < warehouse_index_[0][i].size(); j++) {
       common_selectable_warehouse.push_back(warehouse_index_[0][i][j]);
     }
   }
@@ -193,11 +202,15 @@ void TPCCWorkload::NewOrder(Transaction& txn, TransactionProfile& pro, int w_id,
   std::array<tpcc::NewOrderTxn::OrderLine, tpcc::kLinePerOrder> ol;
   std::bernoulli_distribution is_remote(0.01);
   std::uniform_int_distribution<> quantity_rnd(1, 10);
+  std::uniform_int_distribution<> cross_region_rnd(1, 100);
+  bool cross_region = cross_region_rnd(rg_) <= params_.GetInt32(OVERLAP_RATIO);
   for (size_t i = 0; i < tpcc::kLinePerOrder; i++) {
     auto supply_w_id = w_id;
-    if (is_remote(rg_) && !remote_warehouses.empty()) {
+    if (is_remote(rg_) && !remote_warehouses.empty() && cross_region) {
       supply_w_id = remote_warehouses[i % remote_warehouses.size()];
       pro.is_multi_home = true;
+    } else {
+      supply_w_id = local_selectale_warehouse[i % local_selectale_warehouse.size()];
     }
     ol[i] = tpcc::NewOrderTxn::OrderLine({
         .id = static_cast<int>(i),
